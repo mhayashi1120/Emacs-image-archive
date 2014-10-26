@@ -1,10 +1,10 @@
-;;; image-archive.el --- Image thumbnails in archive file
+;;; image-archive.el --- Image thumbnails in archive file with non-blocking
 
 ;; Author: Masahiro Hayashi <mhayashi1120@gmail.com>
 ;; Keywords: multimedia
-;; URL: TODO https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
+;; URL: https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
 ;; Emacs: GNU Emacs 24 or later
-;; Version: 0.0.1
+;; Version: 0.0.2
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -35,9 +35,14 @@
 
 ;; * This module depend on `image-dired' to imitate UI.
 ;;   Some of customize variables are imported.
+;;   Not like image-dired, non-blocking thumbnail process like `image-dired+'
 
-;; * Followings are tested environment
-;;   archive-mode zip
+;; * Following archive commands are tested result (`-' is not yet tested) .
+;;   GNU bash, version 4.2.37(1)-release (x86_64-pc-linux-gnu)
+;;
+;;   zip |  7z | lha | arc | zoo
+;;  ----------------------------
+;;    o  |  o  |  x  |  -  |  -
 
 ;; * Type following in archive (e.g. zip) file which contains
 ;;   just image files.
@@ -47,9 +52,13 @@
 ;;; TODO:
 ;;  revert-buffer
 ;;  name convention
+;;  log of sequential thumbnail
+;;  clear or notify when displaying original image.
+;;  keep original image if archive/name is same.
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'image-dired)
 (require 'arc-mode)
 
@@ -109,6 +118,12 @@
 ;;; External process
 ;;;
 
+(defun image-archive--generate-process-buffer ()
+  (let ((buf (generate-new-buffer " *image-archive process* ")))
+    (with-current-buffer buf
+      (set-buffer-multibyte nil))
+    buf))
+
 (defun image-archive--construct-extract-shell (subtype archive name)
   (let* ((symname (concat "archive-" (symbol-name subtype) "-extract"))
          (sym (intern-soft symname)))
@@ -161,16 +176,17 @@
 (defun image-archive--invoke-thumb-process (buf subtype archive name thumb)
   (let* ((extractor (image-archive--construct-extract-shell subtype archive name))
          (converter (image-archive--construct-convert-shell thumb))
-         (shell (format "%s | %s" extractor converter))
+         (shell (format "%s 2>/dev/null | %s" extractor converter))
          (proc (image-archive--invoke-shell "image-archive thumb" buf  shell)))
     proc))
 
-(defun image-archive--create-process-chain (buf subtype archive names)
+(defun image-archive--create-thumbnail-process-chain (buf subtype archive names)
   (let* ((name (car names))
          (thumb (image-archive--thumbnail-file archive name))
          (proc (if (file-newer-than-file-p archive thumb)
                    (image-archive--invoke-thumb-process buf subtype archive name thumb)
-                 (start-process "image-archive dummy" buf "true"))))
+                 ;; !! async trick !!
+                 (image-archive--invoke-shell "image-archive dummy" buf ""))))
     (set-process-sentinel proc 'image-archive--process-sentinel)
     (process-put proc 'image-archive-thumb-file thumb)
     (process-put proc 'image-archive-archive-subtype subtype)
@@ -197,15 +213,9 @@
               (image-archive--insert-thumbnail thumb archive name)))))
       (cond
        (names
-        (image-archive--create-process-chain buf subtype archive names))
+        (image-archive--create-thumbnail-process-chain buf subtype archive names))
        ((and buf (buffer-live-p buf))
         (kill-buffer buf))))))
-
-(defun image-archive--generate-process-buffer ()
-  (let ((buf (generate-new-buffer " *image-archive process* ")))
-    (with-current-buffer buf
-      (set-buffer-multibyte nil))
-    buf))
 
 ;;;
 ;;; UI
@@ -214,10 +224,13 @@
 (defun image-archive--original-image-pixel-height ()
   (- (frame-pixel-height)
      image-dired-thumb-height
-     (* (or (and (fboundp 'window-mode-line-height) (window-mode-line-height))
-            (frame-char-height))
+     (* (or
+         (and (fboundp 'window-mode-line-height) (window-mode-line-height))
+         ;; mode line is just a simple line
+         (frame-char-height))
         ;; multiply 2: split window have 2 modeline
-        2)))
+        2)
+     (frame-char-height)))
 
 (defun image-archive--display-image (archive name &optional original-size)
   "Display image ARCHIVE/NAME in image buffer.
@@ -227,7 +240,7 @@ original size."
   (let* ((subtype (image-archive--find-arc-subtype archive))
          (extractor (image-archive--construct-extract-shell subtype archive name))
          (resizer (if original-size "cat" (image-archive--construct-resize-shell)))
-         (shell (format "%s | %s" extractor resizer))
+         (shell (format "%s 2>/dev/null | %s" extractor resizer))
          (buf (image-archive--generate-process-buffer))
          (proc (image-archive--invoke-shell "image-archive original" buf shell)))
     (set-process-sentinel proc 'image-archive--original-image-sentinel)
@@ -287,72 +300,80 @@ original size."
 
     (define-key map "g" 'revert-buffer)
 
-    (define-key map "\C-m" 'image-archive-display-thumbnail-original-image)
+    (define-key map "\C-m" 'image-archive-thumbnail-display-original-image)
 
     (setq image-archive-thumbnail-mode-map map)))
 
-(defvar-local image-archive--active-display-process nil)
+(defvar-local image-archive-thumbnail--active-display-process nil)
 
 (defun image-archive-previous-line (&optional arg)
   (interactive "p")
   (line-move (- arg))
-  (image-archive--display-original-image-maybe))
+  (image-archive-thumbnail--display-original-image-maybe))
 
 (defun image-archive-next-line (&optional arg)
   (interactive "p")
   (line-move arg)
-  (image-archive--display-original-image-maybe))
+  (image-archive-thumbnail--display-original-image-maybe))
 
 (defun image-archive-forward-image (&optional arg)
   (interactive "p")
   (forward-char arg)
-  (image-archive--display-original-image-maybe))
+  (image-archive-thumbnail--display-original-image-maybe))
 
 (defun image-archive-backward-image (&optional arg)
   (interactive "p")
   (backward-char arg)
-  (image-archive--display-original-image-maybe))
+  (image-archive-thumbnail--display-original-image-maybe))
 
-(defun image-archive-display-thumbnail-original-image (&optional arg)
+(defun image-archive-thumbnail-revert-buffer (&optional ignore-auto noconfirm)
+  ;;TODO clear cache?
+  )
+
+(defun image-archive-thumbnail-display-original-image (&optional arg)
   "Display current thumbnail's original image in display buffer."
   (interactive "P")
   (cl-destructuring-bind (archive name)
-      (image-archive--original-file-name)
+      (image-archive-thumbnail--original-file-name)
     (cond
      ((or (null archive) (null name))
       (message "No thumbnail at point"))
      (t
       (let ((buffer (get-buffer-create image-archive--display-image-buffer)))
         (unless (get-buffer-window buffer)
-          (let* ((original-h (/ (image-archive--original-image-pixel-height)
-                                (frame-char-height)))
+          (let* ((original-h (truncate
+                              (*
+                               (/ (image-archive--original-image-pixel-height)
+                                  (frame-char-height))
+                               ;; keep a little margin
+                               1.05)))
                  (t-win (split-window nil original-h 'above))
                  (i-win (selected-window)))
             (set-window-buffer i-win buffer)
             (select-window t-win))))
-      (image-archive--ensure-unactive-process)
-      (setq image-archive--active-display-process
+      (image-archive-thumbnail--ensure-unactive-process)
+      (setq image-archive-thumbnail--active-display-process
             (image-archive--display-image archive name arg))))))
 
-(defun image-archive--display-original-image-maybe ()
+(defun image-archive-thumbnail--display-original-image-maybe ()
   (when (get-buffer-window image-archive--display-image-buffer)
-    (image-archive--ensure-unactive-process)
+    (image-archive-thumbnail--ensure-unactive-process)
     (cl-destructuring-bind (archive name)
-        (image-archive--original-file-name)
+        (image-archive-thumbnail--original-file-name)
       (when (and archive name)
-        (setq image-archive--active-display-process
+        (setq image-archive-thumbnail--active-display-process
               (image-archive--display-image archive name))))))
 
-(defun image-archive--ensure-unactive-process ()
-  (when image-archive--active-display-process
-    (delete-process image-archive--active-display-process)
-    (setq image-archive--active-display-process nil)))
+(defun image-archive-thumbnail--ensure-unactive-process ()
+  (when image-archive-thumbnail--active-display-process
+    (delete-process image-archive-thumbnail--active-display-process)
+    (setq image-archive-thumbnail--active-display-process nil)))
 
-(defun image-archive--image-at-point-p ()
+(defun image-archive-thumbnail--image-at-point-p ()
   "Return true if there is an image-dired thumbnail at point."
   (get-text-property (point) 'image-archive-thumbnail))
 
-(defun image-archive--original-file-name ()
+(defun image-archive-thumbnail--original-file-name ()
   (list (get-text-property (point) 'image-archive-archive-name)
         (get-text-property (point) 'image-archive-name)))
 
@@ -395,7 +416,7 @@ Resized or in full-size."
       (let ((inhibit-read-only t))
         (erase-buffer))
       (image-archive-thumbnail-mode))
-    (image-archive--create-process-chain buf subtype archive names)
+    (image-archive--create-thumbnail-process-chain buf subtype archive names)
     (switch-to-buffer ui-buffer)))
 
 ;;;###autoload
