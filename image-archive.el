@@ -133,8 +133,18 @@
            (args (append arc-command
                          (list (shell-quote-argument archive)
                                (shell-quote-argument name))))
-           (command (mapconcat 'identity args " ")))
+           (real-args (image-archive--hack-command args))
+           (command (mapconcat 'identity real-args " ")))
       command)))
+
+;;FIXME lha program output header line
+(defun image-archive--hack-command (args)
+  (cond
+   ((equal (car args) "lha")
+    ;; Do not escape "|"
+    (append args (list "|" "tail" "-n" "+4")))
+   (t
+    args)))
 
 (defun image-archive--construct-convert-shell (thumbnail-file)
   (let* ((width (number-to-string image-dired-thumb-width))
