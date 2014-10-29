@@ -4,6 +4,7 @@
 ;; Keywords: multimedia
 ;; URL: https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
 ;; Emacs: GNU Emacs 24 or later
+;; Package-Requires: ((emacs "24") (cl-lib "0.5"))
 ;; Version: 0.0.3
 
 ;; This program is free software; you can redistribute it and/or
