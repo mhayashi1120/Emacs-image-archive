@@ -5,7 +5,7 @@
 ;; URL: https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
 ;; Emacs: GNU Emacs 24 or later
 ;; Package-Requires: ((emacs "24") (cl-lib "0.5"))
-;; Version: 0.0.3
+;; Version: 0.0.5
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -39,11 +39,12 @@
 ;;   Not like image-dired, non-blocking thumbnail process like `image-dired+'
 
 ;; * Following archive commands are tested result (`-' is not yet tested) .
-;;   GNU bash, version 4.2.37(1)-release (x86_64-pc-linux-gnu)
 ;;
 ;;   zip |  7z | lha | arc | zoo
 ;;  ----------------------------
 ;;    o  |  o  |  o  |  -  |  -
+;;
+;;   GNU bash, version 4.2.37(1)-release (x86_64-pc-linux-gnu)
 
 ;; * Type following in archive (e.g. zip) file which contains
 ;;   just image files.
@@ -51,11 +52,11 @@
 ;;     M-x image-archive
 
 ;;; TODO:
-;;  name convention
-;;  log of sequential thumbnail
-;;  clear or notify when displaying original image.
-;;  keep original image if archive/name is same.
-;;  when open archive file, execute image-archive `image-file-name-regexp'
+;;  * name convention
+;;  * log of sequential thumbnail is failed
+;;  * clear or notify progressing when displaying original image.
+;;  * keep original image if archive/name is same.
+;;  * when open archive file, execute image-archive `image-file-name-regexp'
 
 ;;; Code:
 
@@ -192,7 +193,7 @@
          (proc (image-archive--invoke-shell "image-archive thumb" buf  shell)))
     proc))
 
-(defun image-archive--create-thumb-process-chain (buf subtype archive names)
+(defun image-archive--create-thumb-process-chain (buf subtype archive names ui-buffer)
   (let* ((name (car names))
          (thumb (image-archive--thumbnail-file archive name))
          (proc (if (file-newer-than-file-p archive thumb)
@@ -205,6 +206,7 @@
     (process-put proc 'image-archive-archive-file archive)
     (process-put proc 'image-archive-name name)
     (process-put proc 'image-archive-rest-names (cdr names))
+    (process-put proc 'image-archive-thumb-buffer ui-buffer)
     proc))
 
 (defun image-archive--thumb-process-sentinel (proc event)
@@ -213,29 +215,37 @@
           (archive (process-get proc 'image-archive-archive-file))
           (name (process-get proc 'image-archive-name))
           (names (process-get proc 'image-archive-rest-names))
+          (ui-buf (process-get proc 'image-archive-thumb-buffer))
           (buf (process-buffer proc))
-          (ui-buf (get-buffer-create image-archive--thumbnail-buffer))
           (thumb (process-get proc 'image-archive-thumb-file)))
       (when (and (eq (process-status proc) 'exit)
                  (= (process-exit-status proc) 0))
-        (with-current-buffer ui-buf
-          (let ((inhibit-read-only t))
-            (save-excursion
-              (goto-char (point-max))
-              (unless (bobp)
-                (insert " "))
-              (image-archive--insert-thumbnail thumb archive name)))))
+        (when (buffer-live-p ui-buf)
+          (with-current-buffer ui-buf
+            (let ((inhibit-read-only t))
+              (save-excursion
+                (goto-char (point-max))
+                (unless (bobp)
+                  ;; insert space to split thumbnails text-property
+                  (insert " "))
+                (image-archive--insert-thumbnail thumb archive name))))))
       (cond
        ((and (not (process-get proc 'image-archive-force-stop))
+             (buffer-live-p ui-buf)
              names)
         (image-archive--create-thumb-process-chain
-         buf subtype archive names))
+         buf subtype archive names ui-buf))
        ((and buf (buffer-live-p buf))
         (kill-buffer buf))))))
 
 ;;;
 ;;; UI
 ;;;
+
+(defun image-archive--generate-thumb-buffer (archive)
+  (generate-new-buffer
+   (format "*image-archive<%s>*"
+           (file-name-nondirectory archive))))
 
 (defun image-archive--original-image-pixel-height ()
   (- (frame-pixel-height)
@@ -382,6 +392,7 @@ original size."
   (line-move (- arg))
   (image-archive-thumbnail--display-original-image-maybe))
 
+;;TODO move to image
 (defun image-archive-next-line (&optional arg)
   (interactive "p")
   (line-move arg)
@@ -408,7 +419,7 @@ original size."
     (let* ((archive (caar res))
            (subtype (image-archive--find-arc-subtype archive)))
       (image-archive--show-thumbnails
-       subtype archive (mapcar 'cadr res)))))
+       subtype archive (mapcar 'cadr res) (current-buffer)))))
 
 (defun image-archive-thumbnail-display-original-image (&optional arg)
   "Display current thumbnail's original image in display buffer."
@@ -471,16 +482,17 @@ Resized or in full-size."
   (cl-loop for f in entries
            collect (aref f 0)))
 
-(defun image-archive--show-thumbnails (subtype archive names)
-  (let ((buf (image-archive--generate-process-buffer))
-        (ui-buffer (get-buffer-create image-archive--thumbnail-buffer)))
-    (with-current-buffer ui-buffer
+(defun image-archive--show-thumbnails (subtype archive names &optional ui-buffer)
+  (let ((proc-buf (image-archive--generate-process-buffer))
+        (ui-buf (or ui-buffer (image-archive--generate-thumb-buffer archive))))
+    (with-current-buffer ui-buf
       (let ((inhibit-read-only t))
         (erase-buffer))
       (image-archive-thumbnail-mode)
-      (setq image-archive-thumbnail--process-buffer buf))
-    (image-archive--create-thumb-process-chain buf subtype archive names)
-    (switch-to-buffer ui-buffer)))
+      (setq image-archive-thumbnail--process-buffer proc-buf))
+    (image-archive--create-thumb-process-chain
+     proc-buf subtype archive names ui-buf)
+    (switch-to-buffer ui-buf)))
 
 ;;;###autoload
 (defun image-archive ()
