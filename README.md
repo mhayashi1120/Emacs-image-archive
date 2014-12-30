@@ -1,6 +1,6 @@
 # image-archive.el
 
-Image thumbnails in archive file
+Image thumbnails in archive file with non-blocking
 
 ## Install:
 
@@ -11,6 +11,7 @@ desired. And put the following expression into your ~/.emacs.
 
     (autoload 'image-archive "image-archive" nil t)
     (autoload 'image-archive-marked-files "image-archive" nil t)
+    (autoload 'image-archive-auto-thumbnails "image-archive")
 
 ## Commentary:
 

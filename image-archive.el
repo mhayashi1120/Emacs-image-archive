@@ -5,7 +5,7 @@
 ;; URL: https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
 ;; Emacs: GNU Emacs 24 or later
 ;; Package-Requires: ((emacs "24") (cl-lib "0.5"))
-;; Version: 0.0.6
+;; Version: 0.0.7
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -31,6 +31,7 @@
 ;;
 ;;     (autoload 'image-archive "image-archive" nil t)
 ;;     (autoload 'image-archive-marked-files "image-archive" nil t)
+;;     (autoload 'image-archive-auto-thumbnails "image-archive")
 
 ;; ## Commentary:
 
