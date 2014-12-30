@@ -18,7 +18,7 @@ desired. And put the following expression into your ~/.emacs.
   Some of customize variables are imported.
   Not like image-dired, non-blocking thumbnail process like `image-dired+'
 
-* Following archive commands are tested result (`-' is not yet tested) .
+* Followings are tested result (`-' is not yet tested) .
 
  | zip |  7z | lha | arc | zoo|
  |-----|-----|-----|-----|----|
