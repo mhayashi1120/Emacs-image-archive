@@ -5,7 +5,7 @@
 ;; URL: https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
 ;; Emacs: GNU Emacs 24 or later
 ;; Package-Requires: ((emacs "24") (cl-lib "0.5"))
-;; Version: 0.0.5
+;; Version: 0.0.6
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -22,7 +22,7 @@
 ;; Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 ;; Boston, MA 02110-1301, USA.
 
-;;; Install:
+;; ## Install:
 
 ;; Please install the ImageMagick before installing this elisp.
 
@@ -32,7 +32,7 @@
 ;;     (autoload 'image-archive "image-archive" nil t)
 ;;     (autoload 'image-archive-marked-files "image-archive" nil t)
 
-;;; Commentary:
+;; ## Commentary:
 
 ;; * This module depend on `image-dired' to imitate UI.
 ;;   Some of customize variables are imported.
@@ -40,23 +40,25 @@
 
 ;; * Following archive commands are tested result (`-' is not yet tested) .
 ;;
-;;   zip |  7z | lha | arc | zoo
-;;  ----------------------------
-;;    o  |  o  |  o  |  -  |  -
+;; | zip |  7z | lha | arc | zoo |
+;; |-----|-----|-----|-----|-----|
+;; |  o  |  o  |  o  |  -  |  -  |
 ;;
 ;;   GNU bash, version 4.2.37(1)-release (x86_64-pc-linux-gnu)
 
 ;; * Type following in archive (e.g. zip) file which contains
-;;   just image files.
+;;   image files.
 ;;
 ;;     M-x image-archive
 
+;; * Automatically execute `image-archive' when open an archive file.
+;;
+;;     (add-hook 'archive-mode-hook 'image-archive-auto-thumbnails)
+
 ;;; TODO:
-;;  * name convention
 ;;  * log of sequential thumbnail is failed
 ;;  * clear or notify progressing when displaying original image.
 ;;  * keep original image if archive/name is same.
-;;  * when open archive file, execute image-archive `image-file-name-regexp'
 
 ;;; Code:
 
@@ -115,6 +117,9 @@
            'image-archive-archive-name archive
            'image-archive-name name
            'mouse-face 'highlight))))
+
+(defvar image-archive--display-image-buffer "*image-archive-image*"
+  "Where larger versions of the images are display.")
 
 ;;;
 ;;; External process
@@ -294,6 +299,45 @@ original size."
         (kill-buffer buf)))))
 
 ;;;
+;;; utility
+;;;
+
+(defun image-archive--files-to-names (entries)
+  (cl-loop for f in entries
+           if (vectorp f)
+           collect (aref f 0)))
+
+(defcustom image-archive-guess-archive-threshold 0.9
+  "Threshold to guess the current archive buffer has just Images.
+Valid value ranges are 0.0 to 1.0 .
+`t' means certainly regard as all of thems are Images.
+`nil' is never."
+  :group 'image-archive
+  :type '(choice
+          float
+          (const t)
+          (const nil)))
+
+(defun image-archive--guess-image-archive ()
+  (cond
+   ((eq image-archive-guess-archive-threshold t) t)
+   ((floatp image-archive-guess-archive-threshold)
+    (cl-loop with files = (append archive-files nil)
+             with extensions = image-file-name-extensions
+             for name in (image-archive--files-to-names files)
+             count 1 into all-count
+             if (and name (member-ignore-case (file-name-extension name) extensions))
+             count 1 into image-count
+             finally return
+             (cond
+              ((null files) nil)
+              ((> (/ (ftruncate image-count) all-count)
+                  image-archive-guess-archive-threshold)
+               t)
+              (t nil))))
+   (t nil)))
+
+;;;
 ;;; mode
 ;;;
 
@@ -386,13 +430,13 @@ original size."
         (forward-char direction))
       (setq count (1- count)))))
 
-;;TODO move to image
+;;TODO move to image position
 (defun image-archive-previous-line (&optional arg)
   (interactive "p")
   (line-move (- arg))
   (image-archive-thumbnail--display-original-image-maybe))
 
-;;TODO move to image
+;;TODO move to image position
 (defun image-archive-next-line (&optional arg)
   (interactive "p")
   (line-move arg)
@@ -464,9 +508,6 @@ original size."
   (let ((map (make-sparse-keymap)))
     (setq image-archive-display-image-mode-map map)))
 
-(defvar image-archive--display-image-buffer "*image-archive-image*"
-  "Where larger versions of the images are display.")
-
 (define-derived-mode image-archive-display-image-mode
   fundamental-mode "image-archive-image-display"
   "Mode for displaying original image in archive file.
@@ -477,10 +518,6 @@ Resized or in full-size."
 ;;;
 ;;; Entry point
 ;;;
-
-(defun image-archive--files-to-names (entries)
-  (cl-loop for f in entries
-           collect (aref f 0)))
 
 (defun image-archive--show-thumbnails (subtype archive names &optional ui-buffer)
   (let ((proc-buf (image-archive--generate-process-buffer))
@@ -514,6 +551,16 @@ Resized or in full-size."
   (image-archive--show-thumbnails
    archive-subtype buffer-file-name
    (image-archive--files-to-names (archive-get-marked ?*))))
+
+(defun image-archive--buffer-for-auto (buffer)
+  (with-current-buffer buffer
+    (when (image-archive--guess-image-archive)
+      (image-archive))))
+
+;;;###autoload
+(defun image-archive-auto-thumbnails ()
+  ;; run timer after switch archive major-mode is done.
+  (run-with-timer 0 nil 'image-archive--buffer-for-auto (current-buffer)))
 
 (provide 'image-archive)
 
