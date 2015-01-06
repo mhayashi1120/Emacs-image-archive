@@ -5,7 +5,7 @@
 ;; URL: https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
 ;; Emacs: GNU Emacs 24 or later
 ;; Package-Requires: ((emacs "24") (cl-lib "0.5"))
-;; Version: 0.0.8
+;; Version: 0.0.9
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -58,9 +58,6 @@
 
 ;;; TODO:
 ;;  * log of sequential thumbnail is failed
-;;  * clear current displaying image or notify progressing when
-;;     displaying original image.
-;;  * keep original image if archive/name is same.
 
 ;;; Code:
 
@@ -270,13 +267,21 @@
 
 If optional argument ORIGINAL-SIZE is non-nil, display image in its
 original size."
+
+  (with-current-buffer (get-buffer-create image-archive--display-image-buffer)
+    (setq mode-line-process
+          (list
+           (propertize "preparing..." 'face 'warning))))
   (let* ((subtype (image-archive--find-arc-subtype archive))
          (extractor (image-archive--construct-extract-shell subtype archive name))
          (resizer (if original-size "cat" (image-archive--construct-resize-shell)))
+         ;; some of commands have stderr
          (shell (format "%s 2>/dev/null | %s" extractor resizer))
          (buf (image-archive--generate-process-buffer))
          (proc (image-archive--invoke-shell "image-archive original" buf shell)))
     (set-process-sentinel proc 'image-archive--original-image-sentinel)
+    (process-put proc 'image-archive-original-archive archive)
+    (process-put proc 'image-archive-original-name name)
     proc))
 
 (defun image-archive--original-image-sentinel (p e)
@@ -291,9 +296,22 @@ original size."
           (erase-buffer)
           ;; TODO what is this mean?
           ;; (clear-image-cache)
-          (image-archive--insert-image image-data)))))
+          (image-archive--insert-image image-data)
+          (let* ((archive-file (process-get p 'image-archive-original-archive))
+                 (name (process-get p 'image-archive-original-name))
+                 (archive (file-name-nondirectory archive-file)))
+            (setq mode-line-process
+                  (list
+                   (propertize "exit" 'face 'success)
+                   " "
+                   (propertize (format "%s<%s>" name archive)
+                               'face 'mode-line-emphasis))))))))
    (t
-    (message "process exited abnormally (code %d)" (process-exit-status p))))
+    (with-current-buffer (get-buffer-create image-archive--display-image-buffer)
+      (setq mode-line-process
+            (list
+             (propertize "exit" 'face 'error)))
+      (message "process exited abnormally (code %d)" (process-exit-status p)))))
   ;; cleanup buffer
   (unless (eq (process-status p) 'run)
     (let ((buf (process-buffer p)))
@@ -346,9 +364,6 @@ Valid value ranges are 0.0 to 1.0 .
 ;;
 ;; Display thumbnails
 ;;
-
-(defvar image-archive--thumbnail-buffer "*image-archive*"
-  "Thumbnail listing buffer.")
 
 (defvar image-archive-thumbnail-mode-map nil)
 
@@ -432,50 +447,32 @@ Valid value ranges are 0.0 to 1.0 .
         (forward-char direction))
       (setq count (1- count)))))
 
-(defvar-local image-archive--vertical-goal nil)
-
-(defun image-archive--pixel-x-posn ()
-  (let ((posn (posn-at-point)))
-    (float (car (posn-x-y posn)))))
-
-;;TODO now trying
 (defun image-archive--line-move (arg)
-  ;; (let ((pixel-X (image-archive--pixel-x-posn)))
-  ;;   (setq image-archive--vertical-goal pixel-X)
-  (line-move arg)
-  ;; (let (next prev)
-  ;;   (unless (image-archive-thumbnail--image-at-point-p)
-  ;;     (image-archive-thumbnail--move-image 1))
-  ;;   (setq next (cons (image-archive--pixel-x-posn) (point)))
-  ;;   (image-archive-thumbnail--move-image -1)
-  ;;   (setq prev (cons (image-archive--pixel-x-posn) (point)))
-  ;;   (cond
-  ;;    ((< (abs (- (car next) pixel-X)) (abs (- (car prev) pixel-X)))
-  ;;     (goto-char (cdr next)))
-  ;;    (t
-  ;;     (goto-char (cdr prev)))))
+  (let ((line-move-visual t))
+    (line-move arg))
   (unless (image-archive-thumbnail--image-at-point-p)
-    (image-archive-thumbnail--move-image 1))
-  )
+    (image-archive-thumbnail--move-image 1)))
 
-;;TODO move to image position
 (defun image-archive-previous-line (&optional arg)
+  "Move to previous visible line thumbnail."
   (interactive "p")
   (image-archive--line-move (- arg))
   (image-archive-thumbnail--display-original-image-maybe))
 
-;;TODO move to image position
 (defun image-archive-next-line (&optional arg)
+  "Move to next visible line thumbnail."
   (interactive "p")
   (image-archive--line-move arg)
   (image-archive-thumbnail--display-original-image-maybe))
 
 (defun image-archive-forward-image (&optional arg)
+  "Forward thumbnail."
   (interactive "p")
   (image-archive-thumbnail--move-image arg)
   (image-archive-thumbnail--display-original-image-maybe))
 
 (defun image-archive-backward-image (&optional arg)
+  "Backward thumbnail."
   (interactive "p")
   (image-archive-thumbnail--move-image (- arg))
   (image-archive-thumbnail--display-original-image-maybe))
@@ -547,6 +544,7 @@ Valid value ranges are 0.0 to 1.0 .
   "Mode for displaying original image in archive file.
 Resized or in full-size."
   (use-local-map image-archive-display-image-mode-map)
+  (setq mode-name nil)
   (setq buffer-read-only t))
 
 ;;;
