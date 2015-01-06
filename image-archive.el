@@ -5,7 +5,7 @@
 ;; URL: https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
 ;; Emacs: GNU Emacs 24 or later
 ;; Package-Requires: ((emacs "24") (cl-lib "0.5"))
-;; Version: 0.0.7
+;; Version: 0.0.8
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -58,7 +58,8 @@
 
 ;;; TODO:
 ;;  * log of sequential thumbnail is failed
-;;  * clear or notify progressing when displaying original image.
+;;  * clear current displaying image or notify progressing when
+;;     displaying original image.
 ;;  * keep original image if archive/name is same.
 
 ;;; Code:
@@ -431,16 +432,42 @@ Valid value ranges are 0.0 to 1.0 .
         (forward-char direction))
       (setq count (1- count)))))
 
+(defvar-local image-archive--vertical-goal nil)
+
+(defun image-archive--pixel-x-posn ()
+  (let ((posn (posn-at-point)))
+    (float (car (posn-x-y posn)))))
+
+;;TODO now trying
+(defun image-archive--line-move (arg)
+  ;; (let ((pixel-X (image-archive--pixel-x-posn)))
+  ;;   (setq image-archive--vertical-goal pixel-X)
+  (line-move arg)
+  ;; (let (next prev)
+  ;;   (unless (image-archive-thumbnail--image-at-point-p)
+  ;;     (image-archive-thumbnail--move-image 1))
+  ;;   (setq next (cons (image-archive--pixel-x-posn) (point)))
+  ;;   (image-archive-thumbnail--move-image -1)
+  ;;   (setq prev (cons (image-archive--pixel-x-posn) (point)))
+  ;;   (cond
+  ;;    ((< (abs (- (car next) pixel-X)) (abs (- (car prev) pixel-X)))
+  ;;     (goto-char (cdr next)))
+  ;;    (t
+  ;;     (goto-char (cdr prev)))))
+  (unless (image-archive-thumbnail--image-at-point-p)
+    (image-archive-thumbnail--move-image 1))
+  )
+
 ;;TODO move to image position
 (defun image-archive-previous-line (&optional arg)
   (interactive "p")
-  (line-move (- arg))
+  (image-archive--line-move (- arg))
   (image-archive-thumbnail--display-original-image-maybe))
 
 ;;TODO move to image position
 (defun image-archive-next-line (&optional arg)
   (interactive "p")
-  (line-move arg)
+  (image-archive--line-move arg)
   (image-archive-thumbnail--display-original-image-maybe))
 
 (defun image-archive-forward-image (&optional arg)
@@ -483,7 +510,13 @@ Valid value ranges are 0.0 to 1.0 .
                                   (frame-char-height))
                                ;; keep a little margin
                                1.05)))
-                 (t-win (split-window nil original-h 'above))
+                 (t-win (condition-case err
+                            (split-window nil original-h 'above)
+                          (error
+                           ;; clear all windows when window too small
+                           (delete-other-windows)
+                           ;; try one more time.
+                           (split-window nil original-h 'above))))
                  (i-win (selected-window)))
             (set-window-buffer i-win buffer)
             (select-window t-win))))
