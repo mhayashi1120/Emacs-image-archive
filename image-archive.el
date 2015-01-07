@@ -296,16 +296,14 @@ original size."
           (erase-buffer)
           ;; TODO what is this mean?
           ;; (clear-image-cache)
-          (image-archive--insert-image image-data)
-          (let* ((archive-file (process-get p 'image-archive-original-archive))
-                 (name (process-get p 'image-archive-original-name))
-                 (archive (file-name-nondirectory archive-file)))
-            (setq mode-line-process
-                  (list
-                   (propertize "exit" 'face 'success)
-                   " "
-                   (propertize (format "%s<%s>" name archive)
-                               'face 'mode-line-emphasis))))))))
+          (image-archive--insert-image image-data))
+        (let* ((archive-file (process-get p 'image-archive-original-archive))
+               (name (process-get p 'image-archive-original-name))
+               (archive (file-name-nondirectory archive-file)))
+          (setq mode-line-process
+                (list
+                 (propertize (format "%s<%s>" name archive)
+                             'face 'mode-line-emphasis)))))))
    (t
     (with-current-buffer (get-buffer-create image-archive--display-image-buffer)
       (setq mode-line-process
