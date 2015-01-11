@@ -13,7 +13,7 @@ desired. And put the following expression into your ~/.emacs.
     (autoload 'image-archive-marked-files "image-archive" nil t)
     (autoload 'image-archive-auto-thumbnails "image-archive")
 
-## Commentary:
+## Usage:
 
 * This module depend on `image-dired` to imitate UI.
   Some of customize variables are imported.

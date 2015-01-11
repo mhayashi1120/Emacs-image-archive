@@ -22,6 +22,8 @@
 ;; Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
 ;; Boston, MA 02110-1301, USA.
 
+;;; Commentary:
+
 ;; ## Install:
 
 ;; Please install the ImageMagick before installing this elisp.
@@ -33,7 +35,7 @@
 ;;     (autoload 'image-archive-marked-files "image-archive" nil t)
 ;;     (autoload 'image-archive-auto-thumbnails "image-archive")
 
-;; ## Commentary:
+;; ## Usage:
 
 ;; * This module depend on `image-dired` to imitate UI.
 ;;   Some of customize variables are imported.
