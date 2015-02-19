@@ -5,7 +5,7 @@
 ;; URL: https://github.com/mhayashi1120/Emacs-image-archive/raw/master/image-archive.el
 ;; Emacs: GNU Emacs 24 or later
 ;; Package-Requires: ((emacs "24") (cl-lib "0.5"))
-;; Version: 0.0.9
+;; Version: 0.1.0
 
 ;; This program is free software; you can redistribute it and/or
 ;; modify it under the terms of the GNU General Public License as
@@ -24,6 +24,11 @@
 
 ;;; Commentary:
 
+;; Show thumbnails in a `archive-mode' buffer like `image-dired'. So
+;; this module depend on `image-dired' to imitate UI.  Some of
+;; customize variables are imported.  But not like image-dired,
+;; non-blocking thumbnail process like `image-dired+'
+
 ;; ## Install:
 
 ;; Please install the ImageMagick before installing this elisp.
@@ -36,10 +41,6 @@
 ;;     (autoload 'image-archive-auto-thumbnails "image-archive")
 
 ;; ## Usage:
-
-;; * This module depend on `image-dired` to imitate UI.
-;;   Some of customize variables are imported.
-;;   Not like image-dired, non-blocking thumbnail process like `image-dired+`
 
 ;; * Followings are tested result (`-` is not yet tested) .
 ;;
@@ -54,7 +55,7 @@
 ;;
 ;;     M-x image-archive
 
-;; * Automatically execute `image-archive` when open an archive file.
+;; * Automatically execute `image-archive' when open an archive file.
 ;;
 ;;     (add-hook 'archive-mode-hook 'image-archive-auto-thumbnails)
 

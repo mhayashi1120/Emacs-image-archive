@@ -1,6 +1,10 @@
-# image-archive.el
+image-archive.el
+================
 
-Image thumbnails in archive file with non-blocking
+Show thumbnails in a `archive-mode` buffer like `image-dired`. So
+this module depend on `image-dired` to imitate UI.  Some of
+customize variables are imported.  But not like image-dired,
+non-blocking thumbnail process like `image-dired+`
 
 ## Install:
 
@@ -9,15 +13,13 @@ Please install the ImageMagick before installing this elisp.
 Put this file into load-path'ed directory, and byte compile it if
 desired. And put the following expression into your ~/.emacs.
 
-    (autoload 'image-archive "image-archive" nil t)
-    (autoload 'image-archive-marked-files "image-archive" nil t)
-    (autoload 'image-archive-auto-thumbnails "image-archive")
+```
+(autoload 'image-archive "image-archive" nil t)
+(autoload 'image-archive-marked-files "image-archive" nil t)
+(autoload 'image-archive-auto-thumbnails "image-archive")
+```
 
 ## Usage:
-
-* This module depend on `image-dired` to imitate UI.
-  Some of customize variables are imported.
-  Not like image-dired, non-blocking thumbnail process like `image-dired+`
 
 * Followings are tested result (`-` is not yet tested) .
 
@@ -30,8 +32,13 @@ desired. And put the following expression into your ~/.emacs.
 * Type following in archive (e.g. zip) file which contains
   image files.
 
-    M-x image-archive
+```
+M-x image-archive
+```
 
 * Automatically execute `image-archive` when open an archive file.
 
-    (add-hook 'archive-mode-hook 'image-archive-auto-thumbnails)
+```
+(add-hook 'archive-mode-hook 'image-archive-auto-thumbnails)
+```
+
